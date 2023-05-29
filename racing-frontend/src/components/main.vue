@@ -6,8 +6,12 @@
       <span>Input name</span> <br />
       <input v-model="name" type="text" />
       <div>
-        <button class="btn-room btn-start-game" @click="InputName">
-          Complete
+        <button
+          :disabled="!name"
+          class="btn-room btn-start-game"
+          @click="InputName"
+        >
+          In game
         </button>
       </div>
     </div>
@@ -27,6 +31,7 @@
           "
           :userName="item.userName"
           :progressPercent="item.persent"
+          :rankDisplay="item.rank == 0 ? null : item.rankDisplay"
         ></scoreboard>
       </div>
     </div>
@@ -36,12 +41,21 @@
       </button>
     </div>
     <game
+      ref="gameComponent"
       :text="text"
       :idRoom="idRoom"
       :connectionId="connectionId"
-      @updated-percent="updatedPercent"
+      @updated-percent="UpdatedPercent"
       v-show="text"
     ></game>
+    <button
+      class="btn-room btn-start-game"
+      style="margin-top: 20px"
+      @click="RaceAgain"
+      v-if="isShowRaceAgain"
+    >
+      Race again
+    </button>
   </div>
 </template>
 
@@ -56,36 +70,58 @@ export default {
   components: { game, scoreboard, room },
   name: "gameTyping",
   data() {
+    const name = sessionStorage.getItem("userName");
+    if (name) this.setUserName(name);
     return {
-      name: "",
+      name,
+      currentWordIndex: 0,
     };
   },
-  computed: mapState([
-    "connectionId",
-    "userName",
-    "isHost",
-    "idRoom",
-    "usersOfRoom",
-    "text",
-  ]),
+  computed: {
+    ...mapState([
+      "connectionId",
+      "userName",
+      "isHost",
+      "idRoom",
+      "usersOfRoom",
+      "text",
+    ]),
+    isShowRaceAgain() {
+      return (
+        this.isHost &&
+        this.usersOfRoom.length &&
+        this.usersOfRoom.every((u) => u.rank !== 0)
+      );
+    },
+  },
   methods: {
-    ...mapMutations(["setUserName"]),
+    ...mapMutations(["setUserName", "reset"]),
     InputName() {
+      sessionStorage.setItem("userName", this.name);
       this.setUserName(this.name);
-      this.isShowRoom = true;
     },
     StartGame() {
       connection.invoke("StartGame", this.idRoom);
     },
-    updatedPercent(results) {
+    UpdatedPercent(results) {
       this.usersOfRoom = results.usersOfRoom;
     },
+    RaceAgain() {
+      this.$refs.gameComponent.resetData();
+      this.reset();
+    },
+  },
+  created() {
+    connection.on("ReceiveError", (result) => {
+      alert(result);
+      this.roomId = "";
+    });
   },
 };
 </script>
 
 <style scoped>
-.btn-room {
+button {
   border-radius: 5px;
   font-weight: bold;
 
@@ -95,7 +131,7 @@ export default {
   cursor: pointer;
   font-size: 20px;
 }
-.btn-room:hover {
+button:hover {
   background-color: #3e8e41;
 }
 
@@ -112,5 +148,12 @@ input[type="text"] {
   border-radius: 4px;
   box-sizing: border-box;
   text-align: center;
+}
+
+button:disabled,
+button[disabled] {
+  border: 1px solid #999999;
+  background-color: #cccccc;
+  color: #666666;
 }
 </style>

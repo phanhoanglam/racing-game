@@ -74,6 +74,9 @@ export default {
         this.$refs.textKey[this.currentWordIndex].classList.add("wrong");
       }
     },
+    resetData() {
+      this.currentWordIndex = 0;
+    },
   },
   created() {
     connection.on("UpdatedPercent", (results) => {

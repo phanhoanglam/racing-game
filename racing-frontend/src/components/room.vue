@@ -1,14 +1,13 @@
 <template>
+  <label>Room id:</label> <br />
   <input v-model="roomId" type="text" />
   <div>
-    <button class="btn-room btn-enter-room" @click="EnterRoom">
+    <button :disabled="!roomId" class="btn-enter-room" @click="EnterRoom">
       Enter the room
     </button>
   </div>
   <div>
-    <button class="btn-room btn-create-room" @click="CreateRoom">
-      Create room
-    </button>
+    <button class="btn-create-room" @click="CreateRoom">Create room</button>
   </div>
 </template>
 
@@ -49,17 +48,17 @@ input[type="text"] {
   box-sizing: border-box;
   text-align: center;
 }
-.btn-room {
+button {
   border-radius: 5px;
   font-weight: bold;
-
   color: #fff;
   background-color: #4caf50;
   border: none;
   cursor: pointer;
   font-size: 20px;
 }
-.btn-room:hover {
+
+button:hover {
   background-color: #3e8e41;
 }
 .btn-create-room {
@@ -68,5 +67,11 @@ input[type="text"] {
 .btn-enter-room {
   padding: 20px 49px;
   margin: 20px 0px;
+}
+button:disabled,
+button[disabled] {
+  border: 1px solid #999999;
+  background-color: #cccccc;
+  color: #666666;
 }
 </style>

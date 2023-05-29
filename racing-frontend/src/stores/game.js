@@ -16,17 +16,33 @@ const store = createStore({
     },
     setState(s, payload) {
       const user = payload.usersOfRoom.find(
-        (user) => user.connectionId == payload.connectionId
+        (user) => user.connectionId === payload.connectionId
       );
       s.idRoom = payload.idRoom;
-      s.connectionId = payload.connectionId;
-      s.userName = user.userName;
-      s.isHost = user.isHost;
+      if (!s.connectionId) {
+        s.connectionId = payload.connectionId;
+        s.userName = user.userName;
+        s.isHost = user.isHost;
+      }
       s.usersOfRoom = payload.usersOfRoom;
       s.text = payload.text;
     },
     setText(s, text) {
       s.text = text;
+    },
+    setRoom(s, payload) {
+      s.usersOfRoom = s.usersOfRoom.filter(function (obj) {
+        return obj.connectionId !== payload;
+      });
+    },
+    reset(s) {
+      s.usersOfRoom.forEach((u) => {
+        u.persent = 0;
+        u.rank = 0;
+        u.rankDisplay = null;
+        u.wpm = 0;
+      });
+      s.text = null;
     },
   },
   getters: {},

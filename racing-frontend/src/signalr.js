@@ -22,4 +22,8 @@ connection.on("ReceiveDataGame", (results) => {
     text: results.text,
   });
 });
+
+connection.on("Disconnected", (results) => {
+  store.commit("setRoom", results);
+});
 export default connection;
