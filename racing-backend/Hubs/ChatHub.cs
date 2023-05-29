@@ -1,17 +1,41 @@
-﻿using System.Text;
-using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.SignalR;
+using Newtonsoft.Json;
 using racing_backend.Models;
 
 namespace racing_backend.Hubs;
 
 public class ChatHub : Hub
 {
-    private readonly HttpClient _httpClient = new HttpClient();
-    //private string Text = "Sometimes you are too ashamed to leave. That was true now. And sometimes you need too much to know the facts, and so humbly and stupidly you stay.";
-    private string Text = "Sometimes you are too ashamed to leave.";
+    private static Dictionary<string, string> textOfRoom = new Dictionary<string, string>();
     private static Dictionary<string, List<User>> rooms = new Dictionary<string, List<User>>();
+
+    public override async Task OnDisconnectedAsync(Exception exception)
+    {
+        string connectionId = Context.ConnectionId;
+
+        var roomReceiveMsg = rooms.Where(kv => kv.Value.Any(u => u.ConnectionId == connectionId))
+            .Select(r => r.Key).ToList();
+
+        foreach (var room in rooms)
+        {
+            room.Value.RemoveAll(u => u.ConnectionId == connectionId);
+            if (room.Value.Count() == 0)
+            {
+                textOfRoom.Remove(room.Key);
+                rooms.Remove(room.Key);
+            }
+        }
+
+        await Clients.Groups(roomReceiveMsg).SendAsync("Disconnected", connectionId);
+        await base.OnDisconnectedAsync(exception);
+    }
+
     public async Task CreateRoom(string userName)
     {
+        if (string.IsNullOrEmpty(userName))
+        {
+            await ReceiveError("Username invalid!!!");
+        }
         var connectionId = Context.ConnectionId;
         var idRoom = new Random().Next(0, 1000000).ToString("D6");
         while (rooms.ContainsKey(idRoom))
@@ -32,6 +56,11 @@ public class ChatHub : Hub
     public async Task JoinRoom(string idRoom, string userName)
     {
         var connectionId = Context.ConnectionId;
+        if (!rooms.Any(r => r.Key == idRoom))
+        {
+            await ReceiveError("Room id does not exist");
+            return;
+        }
         await Groups.AddToGroupAsync(connectionId, idRoom);
         var users = rooms.FirstOrDefault(x => x.Key == idRoom).Value;
         users.Add(new User
@@ -50,31 +79,29 @@ public class ChatHub : Hub
             .ForEach(user =>
             {
                 user.Persent = 0;
-                user.Rank = null;
+                user.Rank = 0;
             });
-        await SendMessageToClient(idRoom, connectionId, rooms.FirstOrDefault(x => x.Key == idRoom).Value, Text);
+        await GenerateText(idRoom);
+        await SendMessageToClient(idRoom, connectionId, rooms.FirstOrDefault(x => x.Key == idRoom).Value, textOfRoom.FirstOrDefault(x => x.Key == idRoom).Value);
     }
 
     public async Task UpdatePercent(int currentWordIndex, string connectionId, string idRoom)
     {
-        var curentPercent = PercentCompleted(currentWordIndex);
-        //List<User> roomList = rooms[idRoom];
-        //int index = roomList.FindIndex(item => item.ConnectionId == connectionId);
-        //roomList[index] = (roomList[index].Item1, roomList[index].Item2, Convert.ToInt32(curentPercent));
-        //rooms[idRoom] = roomList;
+        var text = textOfRoom.FirstOrDefault(x => x.Key == idRoom).Value;
+        var curentPercent = PercentCompleted(currentWordIndex, text.Length);
         List<User> roomList = rooms[idRoom];
         var user = roomList.FirstOrDefault(item => item.ConnectionId == connectionId);
         if (user != null)
         {
             user.Persent = Convert.ToInt32(curentPercent);
         }
+        if (user.Persent == 100)
+        {
+            var rank = roomList.OrderByDescending(x => x.Rank).FirstOrDefault();
+            user.Rank = rank.Rank + 1;
+        }
 
-        //await Clients.Group(idRoom).SendAsync("UpdatedPercent", new
-        //{
-        //    usersOfRoom = rooms.FirstOrDefault(x => x.Key == idRoom).Value,
-        //    connectionId
-        //});
-        await SendMessageToClient(idRoom, connectionId, rooms.FirstOrDefault(x => x.Key == idRoom).Value, Text);
+        await SendMessageToClient(idRoom, connectionId, roomList, text);
     }
 
     private async Task SendMessageToClient(string idRoom, string connectionId, List<User> users, string? text = null)
@@ -88,52 +115,62 @@ public class ChatHub : Hub
         });
     }
 
-    private double PercentCompleted(int count)
+    private async Task ReceiveError(string errorMsg)
     {
-        int totalChars = Text.Length;
+        await Clients.Caller.SendAsync("ReceiveError", errorMsg);
+    }
+
+    private double PercentCompleted(int count, int totalChars)
+    {
         double percentage = (double)count / totalChars * 100;
         return percentage;
     }
 
-    public async Task<string> GenerateText()
+    public async Task GenerateText(string idRoom)
     {
-        try
+        using (HttpClient client = new HttpClient())
         {
-            string apiUrl = "https://api.openai.com/v1/engines/text-davinci-003/completions";
-            string prompt = "Generate a text with meaningful content.";
-            int maxTokens = 30;
-            int n = 1;
+            string apiKey = "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";
 
-            // Gửi yêu cầu API
+            HttpClient httpClient = new HttpClient();
+            string prompt = "I need text from 10 to 20 words with no special characters.";
+
+            string apiUrl = "https://api.openai.com/v1/engines/text-davinci-003/completions";
+
             var requestBody = new
             {
-                prompt = prompt,
-                max_tokens = maxTokens,
-                n = n
+                prompt,
+                max_tokens = 500,
+                temperature = 0.7,
+                top_p = 1,
             };
 
-            string requestBodyJson = System.Text.Json.JsonSerializer.Serialize(requestBody);
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer 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");
-            var content = new StringContent(requestBodyJson, Encoding.UTF8, "application/json");
-            HttpResponseMessage response = await _httpClient.PostAsync(apiUrl, content);
+            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-            if (response.IsSuccessStatusCode)
+            var response = await httpClient.PostAsJsonAsync(apiUrl, requestBody);
+            response.EnsureSuccessStatusCode();
+            var responseData = await response.Content.ReadAsStringAsync();
+            var objectData1 = JsonConvert.DeserializeObject<OpenAIResponseModel>(responseData);
+            //var data = objectData1?.Choices.First().Text.Trim();
+            var data = "This is example text for typing game.";
+            if (rooms.ContainsKey(idRoom))
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                dynamic jsonResponse = System.Text.Json.JsonSerializer.Deserialize<dynamic>(responseContent);
-                string generatedText = jsonResponse.choices[0].text;
-
-                return generatedText;
+                textOfRoom[idRoom] = data;
             }
             else
             {
-                return null;
+                textOfRoom.Add(idRoom, data);
             }
         }
-        catch (Exception ex)
-        {
-            return null;
-        }
     }
+}
+
+public class OpenAIResponseModel
+{
+    public List<OpenAIChoice> Choices { get; set; }
+}
+
+public class OpenAIChoice
+{
+    public string Text { get; set; }
 }

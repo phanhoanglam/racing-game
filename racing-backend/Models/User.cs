@@ -7,33 +7,36 @@ public class User
     public bool IsHost { get; set; } = false;
     public double Persent { get; set; } = 0;
     public double Wpm { get; set; }
-    private int _rank;
-    public string Rank
+    private int _rank = 0;
+    public int Rank
     {
-        get
-        {
-            string suffix;
-            switch (_rank % 10)
-            {
-                case 1:
-                    suffix = "st";
-                    break;
-                case 2:
-                    suffix = "nd";
-                    break;
-                case 3:
-                    suffix = "rd";
-                    break;
-                default:
-                    suffix = "th";
-                    break;
-            }
-            return _rank + suffix;
-        }
+        get { return _rank; }
         set
         {
-            if (value != null)
-            { _rank = int.Parse(value); }
+            _rank = value;
+            CalculateRankDisplay(value);
         }
+    }
+    public string? RankDisplay { get; set; }
+
+    private void CalculateRankDisplay(int? value)
+    {
+        string suffix;
+        switch (value)
+        {
+            case 1:
+                suffix = "st";
+                break;
+            case 2:
+                suffix = "nd";
+                break;
+            case 3:
+                suffix = "rd";
+                break;
+            default:
+                suffix = "th";
+                break;
+        }
+        RankDisplay = value + suffix;
     }
 }
